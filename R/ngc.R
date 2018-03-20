@@ -146,11 +146,11 @@ ngc <-
       for (i in 1:edgeCount)
       {
         edge <- edgeIx[i,]
-        pStart <- edge[1]
-        pEnd <- edge[2]
+        pStart <- edge[2]
+        pEnd <- edge[1]
         lag <- edge[3]
-        dagMat[((d-lag)*p + pStart),(d*p + pEnd)] <- fit$estMat[pStart, pEnd, lag]
-        ringMat[pStart, pEnd] <- ringMat[pStart, pEnd] + abs(fit$estMat[pStart, pEnd, lag])
+        dagMat[((lag-1)*p + pStart),(d*p + pEnd)] <- fit$estMat[pEnd, pStart, lag]
+        ringMat[pStart, pEnd] <- ringMat[pStart, pEnd] + abs(fit$estMat[pEnd, pStart, lag])
       } 
     }
     fit$dag <- graph_from_adjacency_matrix(dagMat, mode = 'directed', weighted = TRUE)
@@ -235,30 +235,31 @@ predict.ngc <-
     }
     n <- dim(X)[1]
     p <- dim(X)[2]
-    d <- dim(X)[3]
+    d1 <- dim(X)[3]
     if (fit$p != p)
     {
       stop("Incompatible dimensions between fit and input array")
     }
     estMat <- fit$estMat
+    d2 <- dim(estMat)[3]
     tsOrder <- fit$tsOrder
-    if (tsOrder > d)
+    if (tsOrder > d1)
     {
       cat("Warning: X is shorter than estimated time series order")
     }
     i = 1
     while (i <= tp)
     {
-      Y <- fit$intercepts
-      d <- dim(X)[3]
-      nlags <- min(d, tsOrder)
+      Y <- matrix(rep(fit$intercepts, each = n), nrow = n)
+      d1 <- dim(X)[3]
+      nlags <- min(d1, tsOrder)
       for (j in 1:nlags)
       {
-        Y <- Y + X[,,(nlags-j+1)]%*%estMat[,,(nlags-j+1)]
+        Y <- Y + X[,,(d1-j+1)]%*%t(estMat[,,(d2-j+1)])
       }
-      X2 <- array(0, c(n, p, d+1))
-      X2[,,1:d] <- X
-      X2[,,(d+1)] <- Y
+      X2 <- array(0, c(n, p, d1+1))
+      X2[,,1:d1] <- X
+      X2[,,(d1+1)] <- Y
       X <- X2
       rm(X2)
       i <- i+1
