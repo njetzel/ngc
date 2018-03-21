@@ -121,7 +121,7 @@ function(
 		    {
 		      #shuffle order of predictors so that group lasso works correctly
 		      X1shuffle <- X1[,order(grpIndex)]
-		      fit1 <- gglasso(X1shuffle, y, group = grpIndex, loss="ls", 
+		      fit1 <- gglasso(X1shuffle, y, group = sort(grpIndex), loss="ls", 
 		                      lambda = lambda)
 		    }
 		    betas <- coef(fit1)
@@ -147,7 +147,7 @@ function(
 		    else
 		    {
 		      X1shuffle <- X1[,order(grpIndex)]
-		      fit1 <- cv.gglasso(X1shuffle, y, group = grpIndex, pred.loss = "L1", pf  = ww)
+		      fit1 <- cv.gglasso(X1shuffle, y, group = sort(grpIndex), pred.loss = "L1", pf  = ww)
 		    }
 		    lambdas[i] <- fit1$lambda.1se
 		    betas <- coef(fit1, s="lambda.1se")
