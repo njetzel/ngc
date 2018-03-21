@@ -78,7 +78,6 @@ function(
 	}
 
 	AA <- matrix(0, p2, p1)
-	intercepts <- rep(0, p2)
 
 	if ( is.null(excld) )
   {
@@ -126,7 +125,6 @@ function(
 		                      lambda = lambda)
 		    }
 		    betas <- coef(fit1)
-		    intercepts[i] <- betas[1]
 		    betas <- betas[-1]
 		    dev <- deviance(fit1)
 		    if (!is.null(dev))
@@ -153,7 +151,6 @@ function(
 		    }
 		    lambdas[i] <- fit1$lambda.1se
 		    betas <- coef(fit1, s="lambda.1se")
-		    intercepts[i] <- betas[1]
 		    betas <- betas[-1]
 		    sigmas[i] <- mean(sqrt(fit1$cvm))
 		  }
@@ -174,6 +171,6 @@ function(
 	{
 	  lambda <- lambdas
 	}
-  return(list(AA = AA, lambda = lambda, sigma = mean(sigmas, na.rm = TRUE), intercepts = intercepts))
+  return(list(AA = AA, lambda = lambda, sigma = mean(sigmas, na.rm = TRUE)))
 }
 

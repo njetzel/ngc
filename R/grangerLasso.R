@@ -63,7 +63,6 @@ grangerLasso <-
     AA <- as.matrix(temp$AA)
     lambda <- temp$lambda
     sigma <- temp$sigma
-    intercepts <- temp$intercepts
     ##Put the matrix output of pldag.set into an array to make it
     ##compatible with other parts of the code
     for(i in 1:p)
@@ -72,6 +71,6 @@ grangerLasso <-
     }
     rm(temp)
 
-    return(list(estMat = estMat, lambda = lambda, sigma = sigma, intercepts = intercepts))
+    return(list(estMat = estMat, lambda = lambda, sigma = sigma))
   }
 

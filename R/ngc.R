@@ -100,7 +100,7 @@ ngc <-
         stop('Groups must be specified with consecutive integers')
       }
       ngrp = length(unique(grpIndex))
-      if (!all.equal(sort(unique(grp)), 1:ngrp))
+      if (!all.equal(sort(unique(grpIndex)), 1:ngrp))
       {
         stop("Groups must be specified with consecutive integers")
       }
@@ -138,7 +138,7 @@ ngc <-
     edgeCount <- dim(edgeIx)[1]
     if (is.null(fit$tsOrder))
     {
-      tsOrder <- ifelse(edgeCount > 0, max(edgeIx[,3]), 0)
+      tsOrder <- ifelse(edgeCount > 0, max(d-edgeIx[,3]+1), 0)
       fit$tsOrder <- ifelse(!is.null(tsOrder), tsOrder, 0)
     }
     if (edgeCount > 0)
@@ -182,7 +182,7 @@ plot.ngc <-
     if (ngc.ring)
     {
       g <- fit$ring
-      edgeThickness = E(g)$weight/mean(E(g)$weight)
+      edgeThickness = ifelse(is.null(E(g)$weight), 0, E(g)$weight/mean(E(g)$weight))
       plot(g, layout = layout_in_circle(g), 
            vertex.shape = "none", edge.width = edgeThickness)
     }
@@ -199,10 +199,10 @@ plot.ngc <-
       }
       par(mar=c(2.5, 2.5, 2.5, 2.5))
       edgeColor = ifelse(E(g)$weight > 0, "green", "red")
-      edgeThickness = abs(E(g)$weight/mean(abs(E(g)$weight)))
+      edgeThickness = ifelse(is.null(E(g)$weight), 0, abs(E(g)$weight/mean(abs(E(g)$weight))))
       plot(g, asp = 0.3, layout=layout_matrix,
            mark.groups = groupList, mark.border = NA,
-           vertex.label = rep(1:p, d+1), mark.expand = 20, vertex.shape="none",
+           vertex.label = rep(1:p, d+1), mark.expand = 16, vertex.shape="none",
            edge.color = edgeColor, edge.width = edgeThickness,
            rescale = FALSE, xlim = c(1, d+1), ylim = c(0, p))
       text(0, -0.5, "Lag")
@@ -250,7 +250,7 @@ predict.ngc <-
     i = 1
     while (i <= tp)
     {
-      Y <- matrix(rep(fit$intercepts, each = n), nrow = n)
+      Y <- matrix(0, nrow = n, ncol = p)
       d1 <- dim(X)[3]
       nlags <- min(d1, tsOrder)
       for (j in 1:nlags)
