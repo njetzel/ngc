@@ -1,6 +1,7 @@
 #' Use adaptively thresholded lasso to estimate graphical Granger causality
 #' @param X input array
 #' @param d number of time lags to consider
+#' @param group group indices
 #' @param typeIerr acceptable type I error rate
 #' @param typeIIerr acceptable type II error rate
 #' @param weights weights for adaptive lasso
@@ -11,6 +12,7 @@ grangerThrLasso <-
   function(
     X, #input array dim=(n,p,T), last time=Y
     d = NULL, #number of time lags to consider
+    group = NULL, #group indices
     typeIerr = NULL, #acceptable type I error rate
     typeIIerr = 0.10, #acceptable type II error rate
     weights = NULL, #weights for granger lasso
@@ -24,9 +26,10 @@ grangerThrLasso <-
     tp <- dim(X)[3]
 
     #initial granger lasso fit and refit
-    grangerLassoFit <- grangerLasso(X, d = d, typeIerr = typeIerr, weights = weights)
+    grangerLassoFit <- grangerLasso(X, d = d, group = group, typeIerr = typeIerr, weights = weights)
     lambda <- grangerLassoFit$lambda
     sigma <- grangerLassoFit$sigma
+    intercepts <- grangerLassoFit$intercepts
     lambda_not <- sqrt(2*log((tp-1)*p)/n)
 
     #set thresholding constants
@@ -76,10 +79,12 @@ grangerThrLasso <-
     #Refit using standard linear regression on nonzero entries
     if (refit==TRUE)
     {
-      estMat <- fitLm(X, estMat, d, p, tp)$estMat
+      lmFit <- fitLm(X, estMat, d, p, tp)
+      estMat <- lmFit$estMat
+      intercepts <- lmFit$intercepts
     }
 
-    return(list(estMat = estMat, lambda = lambda, tsOrder = tsOrder, c2 = thresholdValue/(lambda_not*sigma)))
+    return(list(estMat = estMat, lambda = lambda, tsOrder = tsOrder, intercepts = intercepts))
   }
 
   thresholdGgcFit <- function(ggcFit, edgeThreshold, thresholdValue)
@@ -117,6 +122,7 @@ grangerThrLasso <-
     # create n x (p*d) matrix of predictors
     predictorMatrix <- array2mat(X[,,(tp-d):(tp-1)])
     mse <- rep(NA, p)
+    intercepts <- rep(0, p)
     for (i in 1:p)
     {
       #get response for ith covariate
@@ -130,7 +136,9 @@ grangerThrLasso <-
         if (is.null(cvIx))
         {
           lmfit <- lm(response~predictors)
-          coefs <- coef(lmfit)[-1]
+          coefs <- coef(lmfit)
+          intercepts <- coefs[1]
+          coefs <- coefs[-1]
           coefs[is.na(coefs)] <- 0
         }
         else #split into train and test set
@@ -157,5 +165,5 @@ grangerThrLasso <-
         mse[i] <- sum((testResponse-mean(testResponse))^2)/length(testResponse)
       }
     }
-    return(list(estMat = estMat, mse = mean(mse)))
+    return(list(estMat = estMat, mse = mean(mse), intercepts = intercepts))
   }

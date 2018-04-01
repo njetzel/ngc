@@ -1,6 +1,7 @@
 #' Use truncating lasso to estimate graphical Granger causality
 #' @param X input array
 #' @param d number of time lags to consider
+#' @param group group indices
 #' @param typeIerr acceptable type I error rate
 #' @param typeIIerr acceptable type II error rate
 #' @param weights weights for adaptive lasso
@@ -15,6 +16,7 @@ grangerTlasso <-
   function(
     X, 					#input array dim=(n,p,T), last time=Y
     d = NULL, 		#number of time lags to consider
+    group = NULL,
     typeIerr = 0.10, 			#sig level for lambda (...Method=errBased)
     typeIIerr = 0.10,			#acceptable type II error
     weights = weights,  #matrix of weights for Alasso
@@ -89,7 +91,7 @@ grangerTlasso <-
         ## calculate est
         if (CONTINUE==TRUE){
           if (!useAlasso){
-            tempp <- pldag.set(X1=XX, X2=YY,
+            tempp <- pldag.set(X1=XX, X2=YY, group = group,
                                sigLevel=typeIerr, useWghts=FALSE,
                                wantScale=TRUE, useTLASSO=TRUE, d=d)
 
@@ -100,7 +102,7 @@ grangerTlasso <-
             if (sum(W < 1) > 0){
               W[(W < 1)] <- 1
             }
-            tempp <-pldag.set(XX, YY,
+            tempp <-pldag.set(XX, YY, group = group,
                               sigLevel=typeIerr, useWghts=TRUE,
                               wghts=W, wantScale=TRUE, useTLASSO=TRUE, d=d)
 
@@ -118,11 +120,12 @@ grangerTlasso <-
       }
     }#endwhile()
     lambda <- tempp$lambda
+    intercepts <- tempp$intercepts
 
     if (diff > tol){
       cat("WARNING: BR Alg not converged! Increase maxIter. \n")
     }
 
-    return(list(estMat=newEst, lambda=lambda, tsOrder=jj-1))
+    return(list(estMat=newEst, lambda=lambda, tsOrder=jj-1, intercepts = intercepts))
   }
 

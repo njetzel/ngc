@@ -1,6 +1,7 @@
 #' Fit the lasso with glmnet
 #' @param X1 predictor matrix
 #' @param X2 response matrix
+#' @param group vector of group indices matching number of columns in X1; if null, no group structure
 #' @param sigLevel significance level for penalties
 #' @param useWghts whether to use weights for the penalty
 #' @param wghts weights for penalty
@@ -14,7 +15,7 @@ pldag.set <-
 function(
 	X1,				##predictor set, nxp1 matrix
 	X2, 				##outcome set, nxp2 matrix (X2~X1)
-	grpIndex = NULL, #group indices
+	group = NULL, #group indices
 	sigLevel = NULL, 		##siglevel for MB & BdE penalties
 	useWghts = FALSE,		##use wghts for the penalty?
 					##if TRUE, wghts should be provided
@@ -49,13 +50,13 @@ function(
 	  {
 			cat("WARNING: No weights provided, using weights=1", "\n")
 		}
-	  if (is.null(grpIndex))
+	  if (is.null(group))
 	  {
 	    wghts <- matrix(1,p2,p1)
 	  }
 	  else
 	  {
-	    wghts <- matrix(rep(as.vector(sqrt(table(grpIndex))), p2), nrow=p2)
+	    wghts <- matrix(rep(as.vector(sqrt(table(group))), p2), nrow=p2)
 	  }
 	}
 
@@ -98,6 +99,7 @@ function(
 	lambdas <- rep(NA, p2)
 	sigmas <- rep(NA, p2)
 	sigmas2 <- rep(NA, p2)
+	intercepts <- rep(0, p2)
 	##main estimation loop
 	for (i in 1:p2)
   {
@@ -112,19 +114,18 @@ function(
 		  #estimate sigma with deviance
 		  if (!is.null(lambda))
 		  {
-		    if (is.null(grpIndex))
+		    if (is.null(group))
 		    {
 		      fit1 <- glmnet(X1, y, lambda = lambda, penalty.factor = ww,
 		                     standardize = wantScale, exclude = excldIndx)
 		    }
 		    else
 		    {
-		      #shuffle order of predictors so that group lasso works correctly
-		      X1shuffle <- X1[,order(grpIndex)]
-		      fit1 <- gglasso(X1shuffle, y, group = sort(grpIndex), loss="ls", 
+		      fit1 <- gglasso(X1, y, group = sort(group), loss="ls", 
 		                      lambda = lambda)
 		    }
 		    betas <- coef(fit1)
+		    intercepts[i] <- betas[1]
 		    betas <- betas[-1]
 		    dev <- deviance(fit1)
 		    if (!is.null(dev))
@@ -139,28 +140,23 @@ function(
 		  }
 		  else #estimate sigma with cvm
 		  {
-		    if (is.null(grpIndex))
+		    if (is.null(group))
 		    {
 		      fit1 <- cv.glmnet(X1, y, penalty.factor = ww,
 		                        standardize = wantScale, exclude = excldIndx)
 		    }
 		    else
 		    {
-		      X1shuffle <- X1[,order(grpIndex)]
-		      fit1 <- cv.gglasso(X1shuffle, y, group = sort(grpIndex), pred.loss = "L1", pf  = ww)
+		      fit1 <- cv.gglasso(X1, y, group = sort(group), pred.loss = "L1", pf  = ww)
 		    }
 		    lambdas[i] <- fit1$lambda.1se
 		    betas <- coef(fit1, s="lambda.1se")
+		    intercepts[i] <- betas[1]
 		    betas <- betas[-1]
 		    sigmas[i] <- mean(sqrt(fit1$cvm))
 		  }
 			if (length(betas) > 0)
 		  {
-			  if (!is.null(grpIndex))
-			  {
-			    #reshuffle betas
-			    betas <- betas[order(order(grpIndex))]
-			  }
 				AA[i, ] <- betas
 			}
 			rm(fit1)
@@ -171,6 +167,6 @@ function(
 	{
 	  lambda <- lambdas
 	}
-  return(list(AA = AA, lambda = lambda, sigma = mean(sigmas, na.rm = TRUE)))
+  return(list(AA = AA, lambda = lambda, sigma = mean(sigmas, na.rm = TRUE), intercepts = intercepts))
 }
 

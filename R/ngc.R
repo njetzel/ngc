@@ -2,23 +2,25 @@
 #' @param X input array
 #' @param d number of time lags to consider
 #' @param method estimation method to use; options are "regular", "truncate", or "threshold"
-#' @param grpIndex vector of group indices of length p or p*d; if null, no group structure
+#' @param group vector of group indices of length p or p*d; if null, no group structure
+#' @param groupByTime whether to group covariates across time points
 #' @param typeIerr acceptable type I error rate
 #' @param typeIIerr acceptable type II error rate
 #' @param weights weights for adaptive lasso
 #' @param thresholdConstant constant used to compute threshold
 #' @param refit whether to refit a linear regression after initial thresholding
 #' @param edgeThreshold absolute value threshold for including edge in graph
+#' @param covNames covariate names
 #' @return a list including a matrix of estimated coefficients, final lambda value, and time series order estimate
 #' @examples
 #' p <- 15
-#' tp <- 20
+#' len <- 20
 #' d_actual <- 3
 #' d <- 10
 #' nsample <- 25
 #' sigma <- 0.3
 #' edge <- defn_net(d = d_actual, p = p, n = nsample)
-#' X <- simulate_data(nsample, edge[1:d_actual,,], tp, error_sd = sigma)
+#' X <- simulate_data(nsample, edge[1:d_actual,,], len, error_sd = sigma)
 #' fit1 <- ngc(X, method = 'truncate')
 #' fit2 <- ngc(X, d = d, method = 'threshold', refit = TRUE)
 #' @export ngc
@@ -27,13 +29,15 @@ ngc <-
     X, #input array dim=(n,p,T) (longitudinal), or (p,T) (time series); last time=Y
     d = NULL, #number of time lags to consider
     method = 'regular', #method to use. options are "regular", "truncate", and "threshold"
-    grpIndex = NULL, #vector of group indices of length p or p*d; if null, no group structure
+    group = NULL, #vector of group indices of length p or p*d; if null, no group structure
+    groupByTime = FALSE, #whether 
     typeIerr = NULL, #acceptable type I error rate; if provided, error-based lasso is fitted
     typeIIerr = 0.1, #acceptable type II error rate
     weights = NULL, #wmatrix of weights for Alasso. If no weights are provided, use regular lasso.
     thresholdConstant = NULL, #constant used for calculating threshold value
     refit = FALSE, #whether to refit a linear regression after initial thresholding
-    edgeThreshold = 1e-6 #absolute value threshold for including edge in graph
+    edgeThreshold = 1e-6, #absolute value threshold for including edge in graph
+    covNames = NULL #covariate names
   ){
     ####### START OF FN #######
     if (method != 'regular' & method != 'truncate' & method != 'threshold')
@@ -50,82 +54,94 @@ ngc <-
     {
       n <- 1
       p <- dim(X)[1]
-      tp <- dim(X)[2]
+      len <- dim(X)[2]
     }
     else
     {
       n <- dim(X)[1]
       p <- dim(X)[2]
-      tp <- dim(X)[3]
+      len <- dim(X)[3]
     }
 
     if (is.null(d))
     {
-      d <- tp-1
+      d <- len-1
     }
 
-    if (d >= tp)
+    if (d >= len)
     {
       stop('Number of time lags to consider cannot exceed number of time points')
     }
 
     #Set up replicates for the time series case
     #Put X into array format
-    #The transformed matrix has (tp-d) replicates over d+1 time points
+    #The transformed matrix has (len-d) replicates over d+1 time points
     if (n == 1)
     {
-      if (d >= tp-1)
+      if (d >= len-1)
       {
         stop('Number of time lags to consider must be restricted in order to fit time series')
       }
       cat('Warning: stationarity assumption is required for time series data')
       xMat <- X
-      n <- tp-d
-      tp <- d+1
-      X <- array(0, c(n,p,tp))
+      n <- len-d
+      len <- d+1
+      X <- array(0, c(n,p,len))
       for (i in 1:n)
       {
         X[i,,] <- xMat[,i:(d+i)]
       }
     }
     
-    if (!is.null(grpIndex))
+    if (!is.null(covNames))
     {
-      if (length(grpIndex)!=p & length(grpIndex)!=p*d)
+      if (length(covNames) != p)
+      {
+        stop("Number of covariate names must match number of covariates")
+      }
+    }
+    
+    if (!is.null(group))
+    {
+      if (length(group)!=p)
       {
         stop('Invalid group specification')
       }
-      if (!is.numeric(grpIndex))
+      if (!is.numeric(group))
       {
         stop('Groups must be specified with consecutive integers')
       }
-      ngrp = length(unique(grpIndex))
-      if (!all.equal(sort(unique(grpIndex)), 1:ngrp))
+      if (!all.equal(order(group), 1:p))
       {
         stop("Groups must be specified with consecutive integers")
       }
-      # apply groups across time points if group vector length equals p
-      if (length(grpIndex) == p)
+      # apply groups across time points
+      if (groupByTime)
       {
-        grpIndex <- grpIndex + rep(seq(0, (d-1)*ngrp, by = ngrp), each = p)
+        group <- rep(group, d)
+      }
+      else
+      {
+        ngrp = length(unique(group))
+        group <- group + rep(seq(0, (d-1)*ngrp, by = ngrp), each = p)
       }
     }
 
     if (method == 'regular')
     {
-      fit <- grangerLasso(X, d = d, grpIndex = grpIndex, typeIerr = typeIerr,
+      fit <- grangerLasso(X, d = d, group = group, typeIerr = typeIerr,
                           weights = weights)
     }
 
     else if (method == 'truncate')
     {
-      fit <- grangerTlasso(X, d = d, typeIerr = typeIerr,
+      fit <- grangerTlasso(X, d = d, group = group, typeIerr = typeIerr,
                            typeIIerr = typeIIerr, weights = weights)
     }
 
     else #threshold
     {
-      fit <- grangerThrLasso(X, d = d, typeIerr = typeIerr,
+      fit <- grangerThrLasso(X, d = d, group = group, typeIerr = typeIerr,
                              typeIIerr = typeIIerr, weights = weights,
                              thresholdConstant = thresholdConstant,
                              refit = refit)
@@ -150,16 +166,19 @@ ngc <-
         pEnd <- edge[1]
         lag <- edge[3]
         dagMat[((lag-1)*p + pStart),(d*p + pEnd)] <- fit$estMat[pEnd, pStart, lag]
-        ringMat[pStart, pEnd] <- ringMat[pStart, pEnd] + abs(fit$estMat[pEnd, pStart, lag])
+        ringMat[pStart, pEnd] <- ringMat[pStart, pEnd] + fit$estMat[pEnd, pStart, lag]^2
       } 
     }
     fit$dag <- graph_from_adjacency_matrix(dagMat, mode = 'directed', weighted = TRUE)
-    fit$ring <- graph_from_adjacency_matrix(ringMat, mode = 'directed', weighted = TRUE)
+    fit$ring <- graph_from_adjacency_matrix(sqrt(ringMat), mode = 'directed', weighted = TRUE)
     fit$method <- method
     fit$n <- n
     fit$p <- p
+    fit$len <- len
     fit$d <- d
-    fit$grp <- grpIndex
+    fit$group <- group
+    fit$X <- X
+    fit$covNames <- covNames
     class(fit) = "ngc"
     return(fit)
   }
@@ -170,7 +189,7 @@ ngc <-
 plot.ngc <- 
   function(
     fit, #object of class ngc
-    ngc.ring = FALSE #whether to plot ring graph
+    ngc.type = "dag" #"dag" or "granger"
   ){
     if (class(fit) != "ngc")
     {
@@ -178,11 +197,19 @@ plot.ngc <-
     }
     p <- fit$p
     d <- fit$d
-    grp <- fit$grp
-    if (ngc.ring)
+    covNames <- fit$covNames
+    group <- fit$group
+    if (ngc.type == "granger")
     {
       g <- fit$ring
-      edgeThickness = ifelse(is.null(E(g)$weight), 0, E(g)$weight/mean(E(g)$weight))
+      if (is.null(E(g)$weight))
+      {
+        edgeThickness = 0
+      }
+      else
+      {
+        edgeThickness = E(g)$weight^2/mean(E(g)$weight^2)
+      }
       plot(g, layout = layout_in_circle(g), 
            vertex.shape = "none", edge.width = edgeThickness)
     }
@@ -193,69 +220,102 @@ plot.ngc <-
       layout_matrix = matrix(c(xcoords, ycoords), ncol=2)
       g <- fit$dag
       groupList <- NULL
-      if (!is.null(grp))
+      if (!is.null(group))
       {
-        groupList <- lapply(unique(grp),function(x){which(grp==x)})
+        groupList <- lapply(unique(group),function(x){which(group==x)})
       }
       par(mar=c(2.5, 2.5, 2.5, 2.5))
-      edgeColor = ifelse(E(g)$weight > 0, "green", "red")
-      edgeThickness = ifelse(is.null(E(g)$weight), 0, abs(E(g)$weight/mean(abs(E(g)$weight))))
-      plot(g, asp = 0.3, layout=layout_matrix,
+      edgeColor = ifelse(E(g)$weight > 0, "blue", "red")
+      if (is.null(E(g)$weight))
+      {
+        edgeThickness = 0
+      }
+      else
+      {
+        edgeThickness = E(g)$weight^2/mean(E(g)$weight^2)
+      }
+      labelCex <- max(min(10/p, 1), 0.3)
+      arrowSize <- 0.5*labelCex
+      #curve edges that are more than 1 lag
+      edgeTails <- tail_of(g, E(g))
+      edgeCurvature <- (edgeTails <= p*(d-1))*0.5
+      edgeCurvature <- edgeCurvature*(-1)^((head_of(g, E(g)) %% p) < (edgeTails %% p))
+      aRatio <- (d/p)/2
+      plot(g, asp = aRatio, layout = layout_matrix,
            mark.groups = groupList, mark.border = NA,
-           vertex.label = rep(1:p, d+1), mark.expand = 16, vertex.shape="none",
+           vertex.label.cex = labelCex,
+           vertex.label = rep(1:p, d+1), vertex.shape = "none",
            edge.color = edgeColor, edge.width = edgeThickness,
+           edge.arrow.size = arrowSize, edge.curved = edgeCurvature,
            rescale = FALSE, xlim = c(1, d+1), ylim = c(0, p))
-      text(0, -0.5, "Lag")
+      text(0, -0.5, "Lag", cex = labelCex)
       for (i in 1:d)
       {
-        text(i, -0.5, d-i+1)
-      } 
+        text(i, -0.5, d-i+1, cex = labelCex)
+      }
+      if (!is.null(covNames))
+      {
+        legend(d+1+2*aRatio, p+0.5, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
+      }
     }
   }
 
 #' Predict covariate values at a given time point
 #' @param fit object of class ngc from which to predict
 #' @param X input array of size n x p x T
-#' @param tp time point at which to predict covariate values 
-#' e.g. if tp = 2, output is fitted covariates at time T+2
+#' @param len time point at which to predict covariate values 
+#' e.g. if len = 2, oulenut is fitted covariates at time T+2
 #' @return n x p matrix of fitted covariates for each replicate
 predict.ngc <- 
   function(
     fit, #object of class ngc
-    X, #input array dim = (n, p, T) from which to predict
-    tp #time point at which to predict covariate value
+    tp = 0#time point at which to predict covariate value
   ){
     if (class(fit) != "ngc")
     {
       stop("Class of argument must be ngc")
     }
-    if (tp < 1)
+    if (tp < 0)
     {
-      stop("Specify positive time point")
+      stop("Specify current or future time point")
     }
-    n <- dim(X)[1]
-    p <- dim(X)[2]
-    d1 <- dim(X)[3]
-    if (fit$p != p)
-    {
-      stop("Incompatible dimensions between fit and input array")
-    }
+    n <- fit$n
+    p <- fit$p
+    d <- fit$d
+    len <- fit$len
+    X <- fit$X
     estMat <- fit$estMat
-    d2 <- dim(estMat)[3]
     tsOrder <- fit$tsOrder
-    if (tsOrder > d1)
+    #adjust scaled parameters back to original scale
+    intercepts <- fit$intercepts
+    covMeans <- matrix(0, nrow = p, ncol = tsOrder)
+    covScaleFactors <- matrix(0, nrow = p, ncol = tsOrder)
+    #store coefficient column vectors for each slice 1-d
+    betasOrigScale <- array(0, c(p, p, tsOrder))
+    intsOrigScale <- intercepts
+    if (tsOrder >= 1)
     {
-      cat("Warning: X is shorter than estimated time series order")
+      for (j in 1:tsOrder)
+      {
+        means <- apply(X[,,len-j], 2, mean)
+        scaleFactors <- apply(X[,,len-j], 2, sd)*sqrt((n-1)/n)
+        coefsOrigScale <- t(estMat[,,(d-j+1)])/scaleFactors
+        betasOrigScale[,,j] <- coefsOrigScale
+        intsOrigScale <- intsOrigScale - apply(coefsOrigScale*means, 2, sum)
+      }
     }
-    i = 1
+
+    i <- 0
     while (i <= tp)
     {
-      Y <- matrix(0, nrow = n, ncol = p)
+      Y <- matrix(rep(intsOrigScale, each = n), nrow = n, ncol = p)
       d1 <- dim(X)[3]
-      nlags <- min(d1, tsOrder)
-      for (j in 1:nlags)
+      if (tsOrder >= 1)
       {
-        Y <- Y + X[,,(d1-j+1)]%*%t(estMat[,,(d2-j+1)])
+        for (j in 1:tsOrder)
+        {
+          Y <- Y + X[,,(d1-j)]%*%betasOrigScale[,,j]
+        }
       }
       X2 <- array(0, c(n, p, d1+1))
       X2[,,1:d1] <- X
@@ -264,5 +324,6 @@ predict.ngc <-
       rm(X2)
       i <- i+1
     }
+    
     return(Y)
   }

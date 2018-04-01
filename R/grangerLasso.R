@@ -1,6 +1,7 @@
 #' Use lasso to estimate graphical Granger causality
 #' @param X input array
 #' @param d number of time lags to consider
+#' @param group vector of group indices of length p*d; if null, no group structure
 #' @param penCoefMethod penalty method for lasso; options are "errBased" and "direct"
 #' @param typeIerr acceptable type I error rate
 #' @param lambda penalty coefficient for lasso
@@ -12,7 +13,7 @@ grangerLasso <-
   function(
     X, 				  #input array dim=(n,p,T) (longitudinal), or (p,T) (time series); last time=Y
     d = NULL, 	  #number of time lags to consider
-    grpIndex = NULL, #group indices
+    group = NULL, #group indices
     penCoefMethod = 'errBased', #choose between errBased and direct
     typeIerr = 0.10, 		  #sig level for lambda (...Method=errBased)
     lambda = NULL,		  #value of lambda (...Method=direct)
@@ -30,14 +31,9 @@ grangerLasso <-
     estMat <- array( 0, c(p, p, d) )
 
     ##scale the X matrix
-    for (i in 1:tp)
+    for (i in 1:(tp-1))
     {
-      X[,,i] <- scale( X[,,i] )
-    }
-    #Exclude this for n=1?
-    if (n>1)
-    {
-      X <- sqrt(n/(n-1))*X
+      X[,,i] <- scale( X[,,i] )*sqrt(n/(n-1))
     }
 
     ##first put all X matrices into one big matrix
@@ -46,7 +42,7 @@ grangerLasso <-
 
     if (!useAlasso)
     {
-      temp = pldag.set(XX, YY, grpIndex = grpIndex, sigLevel=typeIerr, wantScale=TRUE)
+      temp = pldag.set(XX, YY, group = group, sigLevel=typeIerr, wantScale=TRUE)
     }
     else
     {
@@ -57,12 +53,13 @@ grangerLasso <-
         W[(W < 1)] = 1
       }
 
-      temp = pldag.set(XX, YY, grpIndex = grpIndex, sigLevel=typeIerr,
+      temp = pldag.set(XX, YY, group = group, sigLevel=typeIerr,
                       useWghts=TRUE, wghts=W, wantScale=TRUE)
     }
     AA <- as.matrix(temp$AA)
     lambda <- temp$lambda
     sigma <- temp$sigma
+    intercepts <- temp$intercepts
     ##Put the matrix output of pldag.set into an array to make it
     ##compatible with other parts of the code
     for(i in 1:p)
@@ -71,6 +68,6 @@ grangerLasso <-
     }
     rm(temp)
 
-    return(list(estMat = estMat, lambda = lambda, sigma = sigma))
+    return(list(estMat = estMat, lambda = lambda, sigma = sigma, intercepts = intercepts))
   }
 
