@@ -116,7 +116,7 @@ function(
 		  {
 		    if (is.null(group))
 		    {
-		      fit1 <- glmnet(X1, y, lambda = lambda, penalty.factor = ww,
+		      fit1 <- glmnet(X1, y, lambda = lambda*sd(y)*sqrt((n-1)/n), penalty.factor = ww,
 		                     standardize = wantScale, exclude = excldIndx)
 		    }
 		    else

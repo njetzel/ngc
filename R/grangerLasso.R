@@ -31,7 +31,7 @@ grangerLasso <-
     estMat <- array( 0, c(p, p, d) )
 
     ##scale the X matrix
-    for (i in 1:tp)
+    for (i in 1:(tp-1))
     {
       X[,,i] <- scale( X[,,i] )*sqrt(n/(n-1))
     }

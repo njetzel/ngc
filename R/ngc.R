@@ -233,7 +233,7 @@ plot.ngc <-
         edgeThickness <- E(g)$weight^2/mean(E(g)$weight^2)
       }
       #control maximum and minimum thickness
-      edgeThickness <- ifelse(edgeThickness > 0.1, edgeThickness, 0.1)
+      edgeThickness <- ifelse(edgeThickness > 0.2, edgeThickness, 0.2)
       edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
       labelCex <- max(min(10/p, 1), 0.3)
       arrowSize <- 0.5*labelCex
