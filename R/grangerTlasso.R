@@ -42,10 +42,9 @@ grangerTlasso <-
     }
 
     ##scale the X matrix
-    for (i in 1:tp){
-      X[,,i] <- scale( X[,,i] )
+    for (i in 1:(tp-1)){
+      X[,,i] <- scale( X[,,i] )*sqrt(n/(n-1))
     }
-    X <- sqrt(n/(n-1))* X
 
     Y <- X[,,tp]		#for compatiblity with previous codes
     YY <- Y
@@ -67,11 +66,9 @@ grangerTlasso <-
       jj <- 1
       CONTINUE <- TRUE		#flag for continuation of inner estimation loop
       while (jj <= d){
-
         XX <- X[,,(tp-jj)]
         ##Find the residual as Y (similar to Gauss-Sidel)
         theta <- array2mat(newEst[,,-(tp-jj)])
-
         for (i in 1:p){
           YY[,i] <- Y[,i] -
             array2mat(X[, , -c(tp-jj,tp)]) %*% theta[i,]

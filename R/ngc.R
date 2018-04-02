@@ -36,7 +36,6 @@ ngc <-
     weights = NULL, #wmatrix of weights for Alasso. If no weights are provided, use regular lasso.
     thresholdConstant = NULL, #constant used for calculating threshold value
     refit = FALSE, #whether to refit a linear regression after initial thresholding
-    edgeThreshold = 1e-6, #absolute value threshold for including edge in graph
     covNames = NULL #covariate names
   ){
     ####### START OF FN #######
@@ -147,7 +146,6 @@ ngc <-
                              refit = refit)
     }
 
-    fit$estMat <- fit$estMat*(abs(fit$estMat)>edgeThreshold)
     dagMat <- Matrix(0, nrow=p*(d+1), ncol=p*(d+1), sparse = TRUE)
     ringMat <- Matrix(0, nrow=p, ncol=p)
     edgeIx <- which(fit$estMat != 0, arr.ind = T)
@@ -179,7 +177,7 @@ ngc <-
     fit$group <- group
     fit$X <- X
     fit$covNames <- covNames
-    class(fit) = "ngc"
+    class(fit) <- "ngc"
     return(fit)
   }
 
@@ -232,13 +230,16 @@ plot.ngc <-
       }
       else
       {
-        edgeThickness = E(g)$weight^2/mean(E(g)$weight^2)
+        edgeThickness <- E(g)$weight^2/mean(E(g)$weight^2)
       }
+      #control maximum and minimum thickness
+      edgeThickness <- ifelse(edgeThickness > 0.1, edgeThickness, 0.1)
+      edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
       labelCex <- max(min(10/p, 1), 0.3)
       arrowSize <- 0.5*labelCex
       #curve edges that are more than 1 lag
       edgeTails <- tail_of(g, E(g))
-      edgeCurvature <- (edgeTails <= p*(d-1))*0.5
+      edgeCurvature <- (edgeTails <= p*(d-1))*0.25
       edgeCurvature <- edgeCurvature*(-1)^((head_of(g, E(g)) %% p) < (edgeTails %% p))
       aRatio <- (d/p)/2
       plot(g, asp = aRatio, layout = layout_matrix,
@@ -249,7 +250,8 @@ plot.ngc <-
            edge.arrow.size = arrowSize, edge.curved = edgeCurvature,
            rescale = FALSE, xlim = c(1, d+1), ylim = c(0, p))
       text(0, -0.5, "Lag", cex = labelCex)
-      for (i in 1:d)
+      lagStep <- ifelse(d < 10, 1, 5)
+      for (i in seq(lagStep, d, lagStep))
       {
         text(i, -0.5, d-i+1, cex = labelCex)
       }
