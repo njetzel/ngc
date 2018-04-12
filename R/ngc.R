@@ -208,8 +208,17 @@ plot.ngc <-
       {
         edgeThickness = E(g)$weight^2/mean(E(g)$weight^2)
       }
-      plot(g, layout = layout_in_circle(g), 
-           vertex.shape = "none", edge.width = edgeThickness)
+      #control maximum and minimum thickness
+      edgeThickness <- ifelse(edgeThickness > 0.2, edgeThickness, 0.2)
+      edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
+      labelCex <- max(min(10/p, 1), 0.3)
+      arrowSize <- 0.5*labelCex
+      plot(g, layout = layout_in_circle(g), vertex.label.cex = labelCex,
+           edge.arrow.size = arrowSize, vertex.shape = "none", edge.width = edgeThickness)
+      if (!is.null(covNames))
+      {
+        legend(1.5, 1, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
+      }
     }
     else
     {
@@ -241,23 +250,23 @@ plot.ngc <-
       edgeTails <- tail_of(g, E(g))
       edgeCurvature <- (edgeTails <= p*(d-1))*0.25
       edgeCurvature <- edgeCurvature*(-1)^((head_of(g, E(g)) %% p) < (edgeTails %% p))
-      aRatio <- (d/p)/2
+      aRatio <- ((d+3)/p)/2
       plot(g, asp = aRatio, layout = layout_matrix,
            mark.groups = groupList, mark.border = NA,
            vertex.label.cex = labelCex,
            vertex.label = rep(1:p, d+1), vertex.shape = "none",
            edge.color = edgeColor, edge.width = edgeThickness,
            edge.arrow.size = arrowSize, edge.curved = edgeCurvature,
-           rescale = FALSE, xlim = c(1, d+1), ylim = c(0, p))
-      text(0, -0.5, "Lag", cex = labelCex)
+           rescale = FALSE, xlim = c(0, d+2), ylim = c(0, p))
+      text(0, -0.25*labelCex, "Lag", cex = labelCex)
       lagStep <- ifelse(d < 10, 1, 5)
       for (i in seq(lagStep, d, lagStep))
       {
-        text(i, -0.5, d-i+1, cex = labelCex)
+        text(i, -0.25*labelCex, d-i+1, cex = labelCex)
       }
       if (!is.null(covNames))
       {
-        legend(d+1+2*aRatio, p+0.5, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
+        legend(d+1.5, p, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
       }
     }
   }
@@ -290,38 +299,23 @@ predict.ngc <-
     tsOrder <- fit$tsOrder
     #adjust scaled parameters back to original scale
     intercepts <- fit$intercepts
-    covMeans <- matrix(0, nrow = p, ncol = tsOrder)
-    covScaleFactors <- matrix(0, nrow = p, ncol = tsOrder)
-    #store coefficient column vectors for each slice 1-d
-    betasOrigScale <- array(0, c(p, p, tsOrder))
-    intsOrigScale <- intercepts
-    if (tsOrder >= 1)
-    {
-      for (j in 1:tsOrder)
-      {
-        means <- apply(X[,,len-j], 2, mean)
-        scaleFactors <- apply(X[,,len-j], 2, sd)*sqrt((n-1)/n)
-        coefsOrigScale <- t(estMat[,,(d-j+1)])/scaleFactors
-        betasOrigScale[,,j] <- coefsOrigScale
-        intsOrigScale <- intsOrigScale - apply(coefsOrigScale*means, 2, sum)
-      }
-    }
 
     i <- 0
     while (i <= tp)
     {
-      Y <- matrix(rep(intsOrigScale, each = n), nrow = n, ncol = p)
+      Y <- matrix(rep(intercepts, each = n), nrow = n, ncol = p)
       d1 <- dim(X)[3]
       if (tsOrder >= 1)
       {
         for (j in 1:tsOrder)
         {
-          Y <- Y + X[,,(d1-j)]%*%betasOrigScale[,,j]
+          Y <- Y + X[,,(d1-j)]%*%t(estMat[,,(d-j+1)])
         }
       }
       X2 <- array(0, c(n, p, d1+1))
       X2[,,1:d1] <- X
-      X2[,,(d1+1)] <- Y
+      scaledY <- scale(Y)*sqrt(n/(n-1))
+      X2[,,(d1+1)] <- ifelse(is.nan(scaledY), 0, scaledY)
       X <- X2
       rm(X2)
       i <- i+1
