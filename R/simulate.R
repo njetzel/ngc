@@ -21,7 +21,6 @@ simulate_data <-
     for (i in 1:n)
     {
       x[i, 1:p, 1:d] <- rnorm(d*p, c(p, d))
-      #x[i,1:p,1:d] <- runif(d*p,10,20)
       for (j in (d+1): ncol(x[1,,]))
       {
         x[i, ,j] <- rnorm(p, 0, error_sd)
@@ -31,6 +30,5 @@ simulate_data <-
         }
       }
     }
-    #plot(seq(1:(T+50*d)), x[1, 9, ], type = "l")
     return(x[,,-c(1:(cutt*d))])
   }

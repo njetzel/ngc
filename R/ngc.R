@@ -2,7 +2,7 @@
 #' @param X input array
 #' @param d number of time lags to consider
 #' @param method estimation method to use; options are "regular", "truncate", or "threshold"
-#' @param group vector of group indices of length p or p*d; if null, no group structure
+#' @param group vector of group indices of length p; if null, no group structure
 #' @param groupByTime whether to group covariates across time points
 #' @param typeIerr acceptable type I error rate
 #' @param typeIIerr acceptable type II error rate
@@ -13,15 +13,15 @@
 #' @param covNames covariate names
 #' @return a list including a matrix of estimated coefficients, final lambda value, and time series order estimate
 #' @examples
-#' p <- 15
+#' p <- 9
 #' len <- 20
 #' d_actual <- 3
-#' d <- 10
-#' nsample <- 25
+#' d <- 6
+#' n <- 30
 #' sigma <- 0.3
-#' edge <- defn_net(d = d_actual, p = p, n = nsample)
-#' X <- simulate_data(nsample, edge[1:d_actual,,], len, error_sd = sigma)
-#' fit1 <- ngc(X, method = 'truncate')
+#' edge <- defn_net(d = d_actual, p = p, n = n)
+#' X <- simulate_data(n, edge, len, error_sd = sigma)
+#' fit1 <- ngc(X, d = d, typeIerr = 0.05)
 #' fit2 <- ngc(X, d = d, method = 'threshold', refit = TRUE)
 #' @export ngc
 ngc <-
@@ -29,8 +29,8 @@ ngc <-
     X, #input array dim=(n,p,T) (longitudinal), or (p,T) (time series); last time=Y
     d = NULL, #number of time lags to consider
     method = 'regular', #method to use. options are "regular", "truncate", and "threshold"
-    group = NULL, #vector of group indices of length p or p*d; if null, no group structure
-    groupByTime = FALSE, #whether 
+    group = NULL, #vector of group indices of length p; if null, no group structure
+    groupByTime = FALSE, #whether to group covariates across time points
     typeIerr = NULL, #acceptable type I error rate; if provided, error-based lasso is fitted
     typeIIerr = 0.1, #acceptable type II error rate
     weights = NULL, #wmatrix of weights for Alasso. If no weights are provided, use regular lasso.
@@ -183,7 +183,7 @@ ngc <-
 
 #' Plot DAG of network or ring graph showing Granger causality
 #' @param fit object of class ngc
-#' @param ngc.ring whether to plot ring graph
+#' @param ngc.type type of plot to create
 plot.ngc <- 
   function(
     fit, #object of class ngc

@@ -1,0 +1,65 @@
+---
+title: "NGC"
+author: "Nick Etzel"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{NGC}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 4.5,
+  fig.height = 4.5
+)
+setwd("/Users/njetzel/Documents/RA/NGC/R")
+source("defn.r")
+source("simulate.r")
+source("array2mat.r")
+source("pldag.set.r")
+source("ngc.r")
+source("grangerLasso.r")
+source("grangerTLasso.r")
+source("grangerThrLasso.r")
+library(glmnet)
+library(gglasso)
+library(igraph)
+```
+
+
+```NGC``` implements methods for estimating network Granger causality from longitudinal and time series data. ```NGC``` supports network estimation using the Granger lasso, truncating lasso, and adaptively thresholded lasso estimators. These methods are described in Shojaie and Michailidis 2010 and Shojaie et al 2011. ```NGC``` also implements group lasso fits with each of these methods. The primary function is ```ngc```, which fits a network estimate. S3 ```plot``` and ```predict``` functions are also provided.
+
+**Requirements**
+
+* glmnet
+* gglasso
+* igraph
+* Matrix
+
+**Examples**
+```{r message = FALSE}
+set.seed(1)
+p <- 9
+len <- 20
+d_actual <- 3
+d <- 6
+n <- 30
+sigma <- 0.3
+edge <- defn_net(d = d_actual, p = p, n = n)
+X <- simulate_data(n, edge, len, error_sd = sigma)
+fit1 = ngc(X, d = d, typeIerr = 0.05)
+fit2 <- ngc(X, d = d, method = 'threshold', refit = TRUE)
+plot(fit1)
+plot(fit2)
+plot(fit1, ngc.type = "granger")
+fit1_pred <- predict(fit1, 2)
+```
+
+**References**
+
+Shojaie A. and Michailidis G. (2010) Discovering Graphical Granger Causality Using a Truncating Lasso Penalty, Bioinformatics, 26(18): i517-i523
+
+Shojaie A., Basu S. and Michailidis G. (2012) Adaptive Thresholding for Reconstructing Regulatory Networks from Time Course Gene Expression Data, Statistics In Biosciences 4(1): 66-83
