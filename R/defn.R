@@ -21,7 +21,7 @@ defn_net =
     edge = array(0, c(d, p, p))
     signum = c(1, -1)
     grpCt = length(unique(grp))
-    sparsity = max(min((n/(d*grpCt*p)), (0.05)), 0.01)
+    sparsity = min((n/(d*grpCt*p)), 0.05)
     cat(paste("sparsity =", round(sparsity, 4)))
     for (ii in 1:d){
       for (i in 1:p){

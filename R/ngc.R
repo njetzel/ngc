@@ -195,6 +195,10 @@ plot.ngc <-
     }
     p <- fit$p
     d <- fit$d
+    if (p > 20)
+    {
+      cat("Warning: plot.ngc is not designed for plotting networks of more than 20 covariates")
+    }
     covNames <- fit$covNames
     group <- fit$group
     if (ngc.type == "granger")

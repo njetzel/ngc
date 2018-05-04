@@ -47,9 +47,7 @@ grangerThrLasso <-
       cvMseMin <- Inf
       thresholdValue <- NA
       #guarantee each fold has roughly equal size (some may have 1 more observation than others)
-      foldid <- rep(1:nfolds, floor(n/nfolds))
-      #reshuffle
-      foldid <- sample(c(foldid, sample(1:nfolds, n-length(foldid))))
+      foldid <- sample(n)%%min(10,n) + 1
       for (c2 in thresholdValues)
       {
         #threshold coefficients

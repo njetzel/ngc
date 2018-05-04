@@ -63,3 +63,5 @@ fit1_pred <- predict(fit1, 2)
 Shojaie A. and Michailidis G. (2010) Discovering Graphical Granger Causality Using a Truncating Lasso Penalty, Bioinformatics, 26(18): i517-i523
 
 Shojaie A., Basu S. and Michailidis G. (2012) Adaptive Thresholding for Reconstructing Regulatory Networks from Time Course Gene Expression Data, Statistics In Biosciences 4(1): 66-83
+
+Basu S., Shojaie A. and Michailidis G. (2015) Network Granger Causality with Inherent Grouping Structure, Journal of Machine Learning Research (JMLR)
