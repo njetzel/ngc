@@ -18,7 +18,7 @@ defn_net =
     {
       grp <- 1:p
     }
-    edge = array(0, c(d, p, p))
+    edge = array(0, c(p, p, d))
     signum = c(1, -1)
     grpCt = length(unique(grp))
     sparsity = min((n/(d*grpCt*p)), 0.05)
@@ -26,7 +26,7 @@ defn_net =
     for (ii in 1:d){
       for (i in 1:p){
         for (j in unique(grp)){
-            edge[ii, i, grp == j] = ((runif(1, 0, 1) < sparsity))*sample(weight, 1)*sample(signum, 1)
+            edge[i, grp == j, ii] = ((runif(1, 0, 1) < sparsity))*sample(weight, 1)*sample(signum, 1)
         }
       }
     }

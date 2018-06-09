@@ -42,12 +42,12 @@ grangerThrLasso <-
     }
     else #min(10,n)-fold cross-validation
     {
-      nfolds <- min(10,n)
+      nfolds <- min(10, ceiling(n/3))
       thresholdValues <- seq(0.2, 0.9, 0.1)*lambda_not*sigma
       cvMseMin <- Inf
       thresholdValue <- NA
       #guarantee each fold has roughly equal size (some may have 1 more observation than others)
-      foldid <- sample(n)%%min(10,n) + 1
+      foldid <- sample(n)%%nfolds + 1
       for (c2 in thresholdValues)
       {
         #threshold coefficients

@@ -1,7 +1,8 @@
 #' Estimate graphical Granger causality
 #' @param X input array
 #' @param d number of time lags to consider
-#' @param method estimation method to use; options are "regular", "truncate", or "threshold"
+#' @param fitMethod "lasso" for Granger lasso fit; "sam" or "hierbasis" for sparse additive modeling
+#' @param estMethod estimation method to use with the lasso; options are "regular", "truncate", or "threshold"
 #' @param group vector of group indices of length p; if null, no group structure
 #' @param groupByTime whether to group covariates across time points
 #' @param typeIerr acceptable type I error rate
@@ -22,13 +23,14 @@
 #' edge <- defn_net(d = d_actual, p = p, n = n)
 #' X <- simulate_data(n, edge, len, error_sd = sigma)
 #' fit1 <- ngc(X, d = d, typeIerr = 0.05)
-#' fit2 <- ngc(X, d = d, method = 'threshold', refit = TRUE)
+#' fit2 <- ngc(X, d = d, estMethod = "threshold", refit = TRUE)
 #' @export ngc
 ngc <-
   function(
     X, #input array dim=(n,p,T) (longitudinal), or (p,T) (time series); last time=Y
     d = NULL, #number of time lags to consider
-    method = 'regular', #method to use. options are "regular", "truncate", and "threshold"
+    fitMethod = "lasso", #"lasso" for Granger lasso fit; "sam" or "hierbasis" for sparse additive modeling
+    estMethod = "regular", #method to use. options are "regular", "truncate", and "threshold"
     group = NULL, #vector of group indices of length p; if null, no group structure
     groupByTime = FALSE, #whether to group covariates across time points
     typeIerr = NULL, #acceptable type I error rate; if provided, error-based lasso is fitted
@@ -39,14 +41,24 @@ ngc <-
     covNames = NULL #covariate names
   ){
     ####### START OF FN #######
-    if (method != 'regular' & method != 'truncate' & method != 'threshold')
+    if (fitMethod != "lasso" & fitMethod != "sam" & fitMethod != "hierbasis")
     {
-      stop('Invalid estimation method specified')
+      stop("Invalid fit method specified")
+    }
+    
+    if (estMethod != "regular" & estMethod != "truncate" & estMethod != "threshold")
+    {
+      stop("Invalid estimation method specified")
+    }
+    
+    if (fitMethod != "lasso" & estMethod != "regular")
+    {
+      stop("This estimation method is not supported for additive modeling")
     }
 
     if (!is.array(X) | length(dim(X)) <2 | length(dim(X)) > 3)
     {
-      stop('Invalid X')
+      stop("Invalid X")
     }
 
     if (length(dim(X))==2)
@@ -69,7 +81,7 @@ ngc <-
 
     if (d >= len)
     {
-      stop('Number of time lags to consider cannot exceed number of time points')
+      stop("Number of time lags to consider cannot exceed number of time points")
     }
 
     #Set up replicates for the time series case
@@ -79,9 +91,9 @@ ngc <-
     {
       if (d >= len-1)
       {
-        stop('Number of time lags to consider must be restricted in order to fit time series')
+        stop("Number of time lags to consider must be restricted in order to fit time series")
       }
-      cat('Warning: stationarity assumption is required for time series data')
+      cat("Warning: stationarity assumption is required for time series data")
       xMat <- X
       n <- len-d
       len <- d+1
@@ -104,11 +116,11 @@ ngc <-
     {
       if (length(group)!=p)
       {
-        stop('Invalid group specification')
+        stop("Invalid group specification")
       }
       if (!is.numeric(group))
       {
-        stop('Groups must be specified with consecutive integers')
+        stop("Groups must be specified with consecutive integers")
       }
       if (!all.equal(order(group), 1:p))
       {
@@ -126,24 +138,34 @@ ngc <-
       }
     }
 
-    if (method == 'regular')
+    if (fitMethod == "lasso")
     {
-      fit <- grangerLasso(X, d = d, group = group, typeIerr = typeIerr,
-                          weights = weights)
+      if (estMethod == "regular")
+      {
+        fit <- grangerLasso(X, d = d, group = group, typeIerr = typeIerr,
+                            weights = weights) 
+      }
+      else if (estMethod == "truncate")
+      {
+        fit <- grangerTlasso(X, d = d, group = group, typeIerr = typeIerr,
+                             typeIIerr = typeIIerr, weights = weights)
+      }
+      
+      else #threshold
+      {
+        fit <- grangerThrLasso(X, d = d, group = group, typeIerr = typeIerr,
+                               typeIIerr = typeIIerr, weights = weights,
+                               thresholdConstant = thresholdConstant,
+                               refit = refit)
+      }
     }
-
-    else if (method == 'truncate')
+    else if (fitMethod == "sam")
     {
-      fit <- grangerTlasso(X, d = d, group = group, typeIerr = typeIerr,
-                           typeIIerr = typeIIerr, weights = weights)
+      fit <- grangerSam(X, d = d)
     }
-
-    else #threshold
+    else if (fitMethod == "hierbasis")
     {
-      fit <- grangerThrLasso(X, d = d, group = group, typeIerr = typeIerr,
-                             typeIIerr = typeIIerr, weights = weights,
-                             thresholdConstant = thresholdConstant,
-                             refit = refit)
+      fit <- grangerHierBasis(X, d = d)
     }
 
     dagMat <- Matrix(0, nrow=p*(d+1), ncol=p*(d+1), sparse = TRUE)
@@ -167,9 +189,10 @@ ngc <-
         ringMat[pStart, pEnd] <- ringMat[pStart, pEnd] + fit$estMat[pEnd, pStart, lag]^2
       } 
     }
-    fit$dag <- graph_from_adjacency_matrix(dagMat, mode = 'directed', weighted = TRUE)
-    fit$ring <- graph_from_adjacency_matrix(sqrt(ringMat), mode = 'directed', weighted = TRUE)
-    fit$method <- method
+    fit$dag <- graph_from_adjacency_matrix(dagMat, mode = "directed", weighted = TRUE)
+    fit$ring <- graph_from_adjacency_matrix(sqrt(ringMat), mode = "directed", weighted = TRUE)
+    fit$fitMethod <- fitMethod
+    fit$estMethod <- estMethod
     fit$n <- n
     fit$p <- p
     fit$len <- len
@@ -187,7 +210,8 @@ ngc <-
 plot.ngc <- 
   function(
     fit, #object of class ngc
-    ngc.type = "dag" #"dag" or "granger"
+    ngc.type = "dag", #"dag" or "granger"
+    sparsify = FALSE #whether to remove covariates with no edges in the high-dimensional case
   ){
     if (class(fit) != "ngc")
     {
@@ -195,85 +219,115 @@ plot.ngc <-
     }
     p <- fit$p
     d <- fit$d
-    if (p > 20)
+    if (ngc.type == "dag" & p > 20)
     {
-      cat("Warning: plot.ngc is not designed for plotting networks of more than 20 covariates")
+      cat("Warning: plot.ngc is not designed for plotting networks of more than 20 covariates.")
+      if (sparsify)
+      {
+        cat("plot.ngc will remove covariates with no edges in order to plot the network.")
+      }
     }
     covNames <- fit$covNames
     group <- fit$group
     if (ngc.type == "granger")
     {
-      g <- fit$ring
-      if (is.null(E(g)$weight))
-      {
-        edgeThickness = 0
-      }
-      else
-      {
-        edgeThickness = E(g)$weight^2/mean(E(g)$weight^2)
-      }
-      #control maximum and minimum thickness
-      edgeThickness <- ifelse(edgeThickness > 0.2, edgeThickness, 0.2)
-      edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
-      labelCex <- max(min(10/p, 1), 0.3)
-      arrowSize <- 0.5*labelCex
-      plot(g, layout = layout_in_circle(g), vertex.label.cex = labelCex,
-           edge.arrow.size = arrowSize, vertex.shape = "none", edge.width = edgeThickness)
-      if (!is.null(covNames))
-      {
-        legend(1.5, 1, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
-      }
+      plot_ring(fit$ring, p, d)
     }
     else
     {
-      xcoords = rep(1:(d+1), each=p)
-      ycoords = rep(p:1, d+1)
-      layout_matrix = matrix(c(xcoords, ycoords), ncol=2)
-      g <- fit$dag
-      groupList <- NULL
-      if (!is.null(group))
-      {
-        groupList <- lapply(unique(group),function(x){which(group==x)})
-      }
-      par(mar=c(2.5, 2.5, 2.5, 2.5))
-      edgeColor = ifelse(E(g)$weight > 0, "blue", "red")
-      if (is.null(E(g)$weight))
-      {
-        edgeThickness = 0
-      }
-      else
-      {
-        edgeThickness <- E(g)$weight^2/mean(E(g)$weight^2)
-      }
-      #control maximum and minimum thickness
-      edgeThickness <- ifelse(edgeThickness > 0.2, edgeThickness, 0.2)
-      edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
-      labelCex <- max(min(10/p, 1), 0.3)
-      arrowSize <- 0.5*labelCex
-      #curve edges that are more than 1 lag
-      edgeTails <- tail_of(g, E(g))
-      edgeCurvature <- (edgeTails <= p*(d-1))*0.25
-      edgeCurvature <- edgeCurvature*(-1)^((head_of(g, E(g)) %% p) < (edgeTails %% p))
-      aRatio <- ((d+3)/p)/2
-      plot(g, asp = aRatio, layout = layout_matrix,
-           mark.groups = groupList, mark.border = NA,
-           vertex.label.cex = labelCex,
-           vertex.label = rep(1:p, d+1), vertex.shape = "none",
-           edge.color = edgeColor, edge.width = edgeThickness,
-           edge.arrow.size = arrowSize, edge.curved = edgeCurvature,
-           rescale = FALSE, xlim = c(0, d+2), ylim = c(0, p))
-      text(0, -0.25*labelCex, "Lag", cex = labelCex)
-      lagStep <- ifelse(d < 10, 1, 5)
-      for (i in seq(lagStep, d, lagStep))
-      {
-        text(i, -0.25*labelCex, d-i+1, cex = labelCex)
-      }
-      if (!is.null(covNames))
-      {
-        legend(d+1.5, p, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
-      }
+      plot_network(fit$dag, p, d, group, fit$fitMethod == "lasso", sparsify)
+    }
+    if (!is.null(covNames))
+    {
+      legend(d+1.5, p, paste(1:p, covNames, sep = " - "), cex = labelCex, ncol = p%/%10 + 1, title = "Legend")
     }
   }
+
+plot_ring <- function(g, p, d)
+{
+  if (is.null(E(g)$weight))
+  {
+    edgeThickness = 0
+  }
+  else
+  {
+    edgeThickness = E(g)$weight^2/mean(E(g)$weight^2)
+  }
+  #control maximum and minimum thickness
+  edgeThickness <- ifelse(edgeThickness > 0.2, edgeThickness, 0.2)
+  edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
+  labelCex <- max(min(10/p, 1), 0.3)
+  arrowSize <- 0.5*labelCex
+  plot(g, layout = layout_in_circle(g), vertex.label.cex = labelCex,
+       edge.arrow.size = arrowSize, vertex.shape = "none", edge.width = edgeThickness)
+}
+
+plot_network <- function(g, p, d, group =  NULL, signed = TRUE, sparsify = FALSE, title = NULL)
+{
+  edgeTails <- tail_of(g, E(g))
+  edgeHeads <- head_of(g, E(g))
+  if (sparsify)
+  {
+    nodes <- as.numeric(unique(c(edgeHeads%%p, edgeTails%%p)))
+    nodes[nodes==0] <- p
+    nodes <- sort(nodes)
+    toRemove <- (1:p)[-nodes] + rep(seq(0, p*d, p), each = p - length(nodes))
+    g <- delete_vertices(g, toRemove)
+    p <- length(nodes)
+    vertexLabels <- rep(nodes, d+1)
+  }
+  else
+  {
+    vertexLabels <- rep(1:p, d+1)
+  }
+  xcoords = rep(1:(d+1), each=p)
+  ycoords = rep(p:1, d+1) 
+  layout_matrix = matrix(c(xcoords, ycoords), ncol=2)
+  groupList <- NULL
+  if (!is.null(group))
+  {
+    groupList <- lapply(unique(group),function(x){which(group==x)})
+  }
+  par(mar=c(2.5, 2.5, 2.5, 2.5))
+  if (signed)
+  {
+    edgeColor = ifelse(E(g)$weight > 0, "blue", "red")
+  }
+  else
+  {
+    edgeColor = NULL
+  }
+  if (is.null(E(g)$weight))
+  {
+    edgeThickness = 0
+  }
+  else
+  {
+    edgeThickness <- E(g)$weight^2/mean(E(g)$weight^2)
+  }
+  #control maximum and minimum thickness
+  edgeThickness <- ifelse(edgeThickness > 0.2, edgeThickness, 0.2)
+  edgeThickness <- ifelse(edgeThickness < 5, edgeThickness, 5)
+  labelCex <- max(min(10/p, 1), 0.3)
+  arrowSize <- 0.5*labelCex
+  #curve edges that are more than 1 lag
+  edgeCurvature <- (edgeTails <= p*(d-1))*0.25
+  edgeCurvature <- edgeCurvature*(-1)^((head_of(g, E(g)) %% p) < (edgeTails %% p))
+  aRatio <- ((d+3)/p)/2
+  plot(g, asp = aRatio, layout = layout_matrix, main = title,
+       mark.groups = groupList, mark.border = NA,
+       vertex.label.cex = labelCex,
+       vertex.label = vertexLabels, vertex.shape = "none",
+       edge.color = edgeColor, edge.width = edgeThickness,
+       edge.arrow.size = arrowSize, edge.curved = edgeCurvature,
+       rescale = FALSE, xlim = c(0, d+2), ylim = c(0, p))
+  text(0, -0.25*labelCex, "Lag", cex = labelCex)
+  lagStep <- ifelse(d < 10, 1, 5)
+  for (i in seq(lagStep, d, lagStep))
+  {
+    text(i, -0.25*labelCex, d-i+1, cex = labelCex)
+  }
+}
 
 #' Predict covariate values at a given time point
 #' @param fit object of class ngc from which to predict
@@ -289,6 +343,10 @@ predict.ngc <-
     if (class(fit) != "ngc")
     {
       stop("Class of argument must be ngc")
+    }
+    if (fit$fitMethod != "lasso")
+    {
+      stop("Predict method is not currently implemented for this fit method")
     }
     if (tp < 0)
     {

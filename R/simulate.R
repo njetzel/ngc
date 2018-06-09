@@ -14,7 +14,7 @@ simulate_data <-
     error_sd = 1,
     cutt = 30
   ){
-    d <- dim(edge)[1]
+    d <- dim(edge)[3]
     p <- dim(edge)[2]
     x = array(0, c(n, p, T+(cutt*d)))
 
@@ -26,7 +26,7 @@ simulate_data <-
         x[i, ,j] <- rnorm(p, 0, error_sd)
         for (l in 1:d)
         {
-          x[i, ,j] <- x[i, ,j] + edge[l,,] %*% x[i, ,j-l]
+          x[i, ,j] <- x[i, ,j] + edge[,,l] %*% x[i, ,j-l]
         }
       }
     }

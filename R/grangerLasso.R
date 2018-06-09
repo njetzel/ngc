@@ -30,13 +30,13 @@ grangerLasso <-
     Onep = matrix(1,p,(p*d))
     estMat <- array( 0, c(p, p, d) )
 
-    ##scale the X matrix
+    #scale the X matrix
     for (i in 1:(tp-1))
     {
       X[,,i] <- scale( X[,,i] )*sqrt(n/(n-1))
     }
 
-    ##first put all X matrices into one big matrix
+    #first put all X matrices into one big matrix
     XX <- array2mat(X[,,(tp-d):(tp-1)])
     YY <- X[,,tp]
 
