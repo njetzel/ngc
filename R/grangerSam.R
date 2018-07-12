@@ -39,15 +39,8 @@ grangerSam <-
         trFit <- samQL(xtr, ytr, p = deg, lambda = lambda)
         #Fix ridiculous error in samQL output
         trFit$knots = trFit$nkots
-        yhatTr <- tryCatch({
-          predict.samQL(trFit, xtest)$values
-        },
-        error = function(cond){
-          save(trFit, file="trFit.rdata")
-          save(xtest, file="xtest.rdata")
-          stop('oops')
-        })
-        
+        yhatTr <- predict.samQL(trFit, xtest)$values
+      
         return(apply((ytest - yhatTr)^2, 2, mean))
       })
       
